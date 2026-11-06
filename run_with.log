@@ -1,0 +1,99 @@
+
+Starting CP-SAT solver v9.15.0
+Parameters: random_seed: 1 log_search_progress: true use_overload_checker_in_cumulative: true use_timetable_edge_finding_in_cumulative: false use_disjunctive_constraint_in_cumulative: false search_branching: FIXED_SEARCH cp_model_presolve: false linearization_level: 0 cp_model_probing_level: 0 symmetry_level: 0 log_to_stdout: false log_subsolver_statistics: false num_workers: 1 use_hard_precedences_in_cumulative: false use_conservative_scale_overload_checker: false
+
+Initial optimization model '': (model_fingerprint: 0x8c0c8af7a10eb54d)
+#Variables: 10 (#ints: 1 in objective) (8 primary variables)
+  - 2 Booleans in [0,1]
+  - 1 in [0,3]
+  - 1 in [0,60]
+  - 1 in [1,2]
+  - 1 in [1,4]
+  - 1 in [2,3]
+  - 3 constants in {1,2,3} 
+#kCumulative: 1 (#intervals: 2, #variable_sizes: 1, #variable_demands: 1, #fixed_intervals: 1)
+#kExactlyOne: 1 (#literals: 2)
+#kInterval: 2 (#fixed: 1)
+#kLinMax: 1 (#expressions: 2)
+#kLinear1: 6 (#enforced: 6)
+
+Starting presolve at 0.00s
+
+Presolve summary:
+  - 0 affine relations were detected.
+  - rule 'linear: always true' was applied 1 time.
+
+Presolved optimization model '': (model_fingerprint: 0xa4a61fc23734dbe3)
+#Variables: 10 (#ints: 1 in objective) (7 primary variables)
+  - 2 Booleans in [0,1]
+  - 1 in [0,3]
+  - 1 in [0,60]
+  - 1 in [1,2]
+  - 1 in [1,4]
+  - 1 in [2,3]
+  - 3 constants in {1,2,3} 
+#kCumulative: 1 (#intervals: 2, #variable_sizes: 1, #variable_demands: 1, #fixed_intervals: 1)
+#kExactlyOne: 1 (#literals: 2)
+#kInterval: 2 (#fixed: 1)
+#kLinMax: 1 (#expressions: 2)
+#kLinear1: 6 (#enforced: 6)
+#kLinear3: 1
+
+Preloading model.
+#Bound   0.00s best:inf   next:[0,60]     initial_domain
+
+Starting search at 0.00s with 1 workers.
+1 full problem subsolver: [main]
+
+#Bound   0.00s best:inf   next:[3,4]      main (initial_propagation)
+#1       0.01s best:3     next:[]         main
+#Done    0.01s main
+
+Task timing           n [     min,      max]      avg      dev     time         n [     min,      max]      avg      dev    dtime
+      'main':         1 [  7.29ms,   7.29ms]   7.29ms   0.00ns   7.29ms         1 [  1.32us,   1.32us]   1.32us   0.00ns   1.32us
+
+Search stats    Bools  Conflicts  Branches  Restarts  BacktrackToRoot  Backtrack  BoolPropag  IntegerPropag
+       'main':      5          0         1         0                1          1           4             13
+
+SAT formula    Fixed  Equiv  Total  VarLeft  BinaryClauses  PermanentClauses  TemporaryClauses
+      'main':      1      0      5        4             20                 0                 0
+
+SAT stats    ClassicMinim  LitRemoved  LitRemovedBinary  LitLearned  LitForgotten  Subsumed
+    'main':             0           0                 0           0             0         0
+
+Vivification    Clauses  Decisions  LitTrue  Subsumed  LitRemoved  DecisionReused  Conflicts
+       'main':        0          0        0         0           0               0          0
+
+Clause deletion    at_true  l_and_not(l)  to_binary  sub_conflict  sub_extra  sub_decisions  sub_eager  sub_vivify  sub_probing  sub_inpro  blocked  eliminated  forgotten  promoted  conflicts
+          'main':        0             0          0             0          0              0          0           0            0          0        0           0          0         0          0
+
+Solutions (1)    Num   Rank
+        'main':    2  [0,1]
+
+Objective bounds     Num
+  'initial_domain':    1
+            'main':    1
+
+Solution repositories    Added  Queried  Synchro
+    'alternative_path':      0        0        0
+      'best_solutions':      1        0        1
+   'fj solution hints':      0        0        0
+
+LRAT_status: NA
+CpSolverResponse summary:
+status: OPTIMAL
+objective: 3
+best_bound: 3
+integers: 10
+booleans: 5
+conflicts: 0
+branches: 1
+propagations: 4
+integer_propagations: 13
+restarts: 0
+lp_iterations: 0
+walltime: 0.0078543
+usertime: 0.0078544
+deterministic_time: 1.325e-06
+gap_integral: 0
+solution_fingerprint: 0x2d0940c872509a77

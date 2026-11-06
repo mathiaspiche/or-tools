@@ -1,0 +1,187 @@
+Version MSBuild 17.14.40+3e7442088 pour .NET Framework
+
+  Auto build dll exports
+  BZip2.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\bz2.dll
+  crc_cord_state.cc
+  Auto build dll exports
+  Auto build dll exports
+  ZLIB.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\zlib1.dll
+  utf8_range.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\libutf8_range.dll
+  libupb.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\libupb.lib
+  CoinUtils.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\CoinUtils.lib
+  Osi.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\Osi.lib
+  crc_memcpy_fallback.cc
+  Auto build dll exports
+     Création de la bibliothèque C:/Users/mathi/or-tools/build/RelWithDebInfo/bin/highs.lib et de l'objet C:/Users/mathi/or-tools/build/RelWithDebInfo/bin/highs.exp
+  crc_memcpy_x86_arm_combined.cc
+  highs.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\highs.dll
+  Clp.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\Clp.lib
+  ClpSolver.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\ClpSolver.lib
+  OsiClp.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\OsiClp.lib
+  CglMixedIntegerRoundingTest.cpp
+  CglMixedIntegerRounding.cpp
+  CglDuplicateRow.cpp
+  CglCutGenerator.cpp
+  CglPreProcess.cpp
+  CglProbing.cpp
+  CglProbingTest.cpp
+  CglMixedIntegerRounding2.cpp
+  CglMixedIntegerRounding2Test.cpp
+  CglLandPUtils.cpp
+  CglLandPTest.cpp
+  CglLandPTabRow.cpp
+  CglLandPSimplex.cpp
+  CglLandPValidator.cpp
+  CglLandPMessages.cpp
+  CglLandP.cpp
+  CglOddHoleTest.cpp
+  CglOddHole.cpp
+  CglRedSplitParam.cpp
+  CglRedSplit.cpp
+  CglRedSplitTest.cpp
+  CglAllDifferent.cpp
+  CglKnapsackCoverTest.cpp
+  CglKnapsackCover.cpp
+  CglSimpleRoundingTest.cpp
+  CglSimpleRounding.cpp
+  CglZeroHalfTest.cpp
+  Cgl012cut.cpp
+  CglZeroHalf.cpp
+  CglRedSplit2Test.cpp
+  CglRedSplit2Param.cpp
+  CglRedSplit2.cpp
+  CglMessage.cpp
+  CglStored.cpp
+  CglParam.cpp
+  CglResidualCapacity.cpp
+  CglResidualCapacityTest.cpp
+  CglTwomirTest.cpp
+  CglTwomir.cpp
+  CglFlowCoverTest.cpp
+  CglFlowCover.cpp
+  CglCliqueHelper.cpp
+  CglCliqueTest.cpp
+  CglClique.cpp
+  CglTreeInfo.cpp
+  CglLiftAndProject.cpp
+  CglGomoryTest.cpp
+  CglGomory.cpp
+  CglGMI.cpp
+  CglGMIParam.cpp
+  crc_non_temporal_memcpy.cc
+  crc_x86_arm_combined.cc
+  failure_signal_handler.cc
+  address_is_readable.cc
+  decode_rust_punycode.cc
+  Cgl.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\Cgl.lib
+  Building Custom Rule C:/Users/mathi/or-tools/build/_deps/cbc-src/Cbc/CMakeLists.txt
+  CbcBranchAllDifferent.cpp
+  CbcBranchCut.cpp
+  CbcBranchDecision.cpp
+  CbcBranchDefaultDecision.cpp
+  CbcBranchDynamic.cpp
+  CbcBranchLotsize.cpp
+  CbcBranchToFixLots.cpp
+  CbcBranchingObject.cpp
+  CbcClique.cpp
+  CbcCompareDefault.cpp
+  CbcCompareDepth.cpp
+  CbcCompareEstimate.cpp
+  CbcCompareObjective.cpp
+  CbcConsequence.cpp
+  CbcCountRowCut.cpp
+  CbcCutGenerator.cpp
+  CbcCutModifier.cpp
+  CbcCutSubsetModifier.cpp
+  CbcDummyBranchingObject.cpp
+  CbcEventHandler.cpp
+  CbcFathom.cpp
+  CbcFathomDynamicProgramming.cpp
+  CbcFixVariable.cpp
+  CbcFollowOn.cpp
+  CbcFullNodeInfo.cpp
+  CbcGeneral.cpp
+  CbcGeneralDepth.cpp
+  CbcHeuristic.cpp
+  CbcHeuristicDINS.cpp
+  CbcHeuristicDW.cpp
+  CbcHeuristicDive.cpp
+  CbcHeuristicDiveCoefficient.cpp
+  CbcHeuristicDiveFractional.cpp
+  demangle.cc
+  CbcHeuristicDiveGuided.cpp
+  CbcHeuristicDiveLineSearch.cpp
+  CbcHeuristicDivePseudoCost.cpp
+  demangle_rust.cc
+  CbcHeuristicDiveVectorLength.cpp
+  CbcHeuristicFPump.cpp
+  CbcHeuristicGreedy.cpp
+  CbcHeuristicLocal.cpp
+  CbcHeuristicPivotAndFix.cpp
+  CbcHeuristicRENS.cpp
+  CbcHeuristicRINS.cpp
+  CbcHeuristicRandRound.cpp
+  CbcHeuristicVND.cpp
+  CbcMessage.cpp
+  CbcModel.cpp
+  CbcNWay.cpp
+  CbcNode.cpp
+  CbcNodeInfo.cpp
+  CbcObject.cpp
+  CbcObjectUpdateData.cpp
+  CbcPartialNodeInfo.cpp
+  CbcSOS.cpp
+  elf_mem_image.cc
+  CbcSimpleInteger.cpp
+  CbcSimpleIntegerDynamicPseudoCost.cpp
+  CbcSimpleIntegerPseudoCost.cpp
+  examine_stack.cc
+  CbcStatistics.cpp
+  CbcStrategy.cpp
+  CbcSubProblem.cpp
+  CbcThread.cpp
+  CbcTree.cpp
+  CbcTreeLocal.cpp
+  stack_consumption.cc
+  utf8_for_code_point.cc
+  vdso_support.cc
+  leak_check.cc
+  stacktrace.cc
+  symbolize.cc
+  city.cc
+  hash.cc
+  Cbc.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\Cbc.lib
+  Building Custom Rule C:/Users/mathi/or-tools/build/_deps/cbc-src/Cbc/CMakeLists.txt
+  Building Custom Rule C:/Users/mathi/or-tools/build/_deps/cbc-src/Cbc/CMakeLists.txt
+  OsiCbcSolverInterface.cpp
+  Cbc_C_Interface.cpp
+  CbcCbcParam.cpp
+  Cbc_ampl.cpp
+  CbcLinked.cpp
+  CbcLinkedUtils.cpp
+  unitTestClp.cpp
+  CbcSolver.cpp
+  CbcSolverHeuristics.cpp
+  CbcSolverAnalyze.cpp
+  CbcMipStartIO.cpp
+  CbcSolverExpandKnapsack.cpp
+  OsiCbc.vcxproj -> C:\Users\mathi\or-tools\build\RelWithDebInfo\bin\OsiCbc.lib
+  Génération de code en cours...
+  Compilation en cours...
+  die_if_null.cc
+  initialize.cc
+  check_op.cc
+  conditions.cc
+  fnmatch.cc
+  log_format.cc
+  log_message.cc
+  log_sink_set.cc
+  nullguard.cc
+  proto.cc
+  structured_proto.cc
+  vlog_config.cc
+  log_entry.cc
+  log_sink.cc
+  int128.cc
+  hashtable.cc
+^C

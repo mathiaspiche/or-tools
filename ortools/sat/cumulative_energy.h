@@ -21,6 +21,7 @@
 #include "absl/types/span.h"
 #include "ortools/sat/2d_orthogonal_packing.h"
 #include "ortools/sat/integer.h"
+#include "ortools/sat/sat_base.h"
 #include "ortools/sat/integer_base.h"
 #include "ortools/sat/model.h"
 #include "ortools/sat/scheduling_helpers.h"
@@ -66,9 +67,11 @@ class CumulativeEnergyConstraint : public PropagatorInterface {
   bool Propagate() final;
   void RegisterWith(GenericLiteralWatcher* watcher);
 
- private:
+private:
   const AffineExpression capacity_;
   IntegerTrail* integer_trail_;
+  Trail* trail_; 
+  Model* model_; 
   SchedulingConstraintHelper* helper_;
   SchedulingDemandHelper* demands_;
 
@@ -141,6 +144,7 @@ class CumulativeDualFeasibleEnergyConstraint : public PropagatorInterface {
   OrthogonalPackingInfeasibilityDetector opp_infeasibility_detector_;
   const AffineExpression capacity_;
   IntegerTrail* integer_trail_;
+  Trail* trail_;
   SchedulingConstraintHelper* helper_;
   SchedulingDemandHelper* demands_;
 

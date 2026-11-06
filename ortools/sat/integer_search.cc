@@ -12,7 +12,8 @@
 // limitations under the License.
 
 #include "ortools/sat/integer_search.h"
-
+#include <iostream>
+#include "ortools/sat/cp_model_mapping.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -56,8 +57,67 @@
 #include "ortools/util/time_limit.h"
 
 namespace operations_research {
-namespace sat {
 
+namespace sat {
+  std::string MpsDecrireDecision(Model* model, Literal decision) {
+  auto* mapping = model->GetOrCreate<CpModelMapping>();
+  auto* encoder = model->GetOrCreate<IntegerEncoder>();
+  for (int i = 0; i < mapping->NumProtoVariables(); ++i) {
+    if (!mapping->IsBoolean(i)) continue;
+    if (mapping->Literal(i) == decision) {
+      return "x" + std::to_string(i) + " = 1";
+    }
+    if (mapping->Literal(i) == decision.Negated()) {
+      return "x" + std::to_string(i) + " = 0";
+    }
+  }
+  for (const IntegerLiteral il : encoder->GetIntegerLiterals(decision)) {
+    for (int i = 0; i < mapping->NumProtoVariables(); ++i) {
+      if (!mapping->IsInteger(i)) continue;
+      const IntegerVariable v = mapping->Integer(i);
+      if (il.var == v) {
+        return "x" + std::to_string(i) + " >= " +
+               std::to_string(il.bound.value());
+      }
+      if (il.var == NegationOf(v)) {
+        return "x" + std::to_string(i) + " <= " +
+               std::to_string(-il.bound.value());
+      }
+    }
+  }
+  return decision.DebugString() + " (non traduit)";
+}
+
+  namespace {
+// MPS : affiche le domaine de chaque variable du modele a un noeud
+void MpsAfficherDomaines(Model* model, const std::string& titre) {
+  static int num_noeud = 0;
+  auto* mapping = model->GetOrCreate<CpModelMapping>();
+  auto* integer_trail = model->GetOrCreate<IntegerTrail>();
+  auto* trail = model->GetOrCreate<Trail>();
+  const auto& a = trail->Assignment();
+
+  std::cerr << "=== NOEUD " << ++num_noeud << " | niveau="
+            << trail->CurrentDecisionLevel() << " | " << titre << "\n";
+  for (int i = 0; i < mapping->NumProtoVariables(); ++i) {
+    std::cerr << "  x" << i << " = ";
+    if (mapping->IsBoolean(i)) {
+      const Literal l = mapping->Literal(i);
+      std::cerr << (a.LiteralIsTrue(l) ? "1" : a.LiteralIsFalse(l) ? "0" : "{0,1}");
+    } else if (mapping->IsInteger(i)) {
+      const IntegerVariable v = mapping->Integer(i);
+      const IntegerValue lb = integer_trail->LowerBound(v);
+      const IntegerValue ub = integer_trail->UpperBound(v);
+      if (lb == ub) std::cerr << lb;
+      else std::cerr << "[" << lb << "," << ub << "]";
+    } else {
+      std::cerr << "(non charge)";
+    }
+    std::cerr << "\n";
+  }
+}
+
+}  
 IntegerLiteral AtMinValue(IntegerVariable var, IntegerTrail* integer_trail) {
   const IntegerValue lb = integer_trail->LowerBound(var);
   DCHECK_LE(lb, integer_trail->UpperBound(var));
@@ -1520,8 +1580,19 @@ bool IntegerSearchHelper::TakeDecision(Literal decision,
       /*conflict=*/sat_solver_->CurrentDecisionLevel() <= old_level);
 
   sat_solver_->AdvanceDeterministicTime(time_limit_);
+
+  // MPS : domaines de toutes les variables apres cette decision
+  const bool conflit = sat_solver_->CurrentDecisionLevel() <= old_level;
+  MpsAfficherDomaines(
+      model_, std::string(conflit ? "CONFLIT -> retour arriere, decision "
+                                  : "decision ") +
+                  MpsDecrireDecision(model_, decision) + "  [" +
+                  decision.DebugString() + "]");
+  
+
   return sat_solver_->ReapplyAssumptionsIfNeeded();
 }
+
 
 SatSolver::Status IntegerSearchHelper::SolveIntegerProblem() {
   if (time_limit_->LimitReached()) return SatSolver::LIMIT_REACHED;

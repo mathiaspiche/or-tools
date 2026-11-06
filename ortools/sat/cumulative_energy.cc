@@ -12,7 +12,7 @@
 // limitations under the License.
 
 #include "ortools/sat/cumulative_energy.h"
-
+#include <map>
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
@@ -20,7 +20,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-
+#include "ortools/sat/integer_search.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -37,7 +37,7 @@
 #include "ortools/sat/util.h"
 #include "ortools/util/scheduling.h"
 #include "ortools/util/strong_integers.h"
-
+#include "ortools/sat/cp_model_mapping.h"
 namespace operations_research {
 namespace sat {
 
@@ -70,6 +70,8 @@ CumulativeEnergyConstraint::CumulativeEnergyConstraint(
     SchedulingDemandHelper* demands, Model* model)
     : capacity_(capacity),
       integer_trail_(model->GetOrCreate<IntegerTrail>()),
+      trail_(model->GetOrCreate<Trail>()),
+      model_(model),
       helper_(helper),
       demands_(demands) {
   const int num_tasks = helper_->NumTasks();
@@ -83,18 +85,114 @@ void CumulativeEnergyConstraint::RegisterWith(GenericLiteralWatcher* watcher) {
   watcher->NotifyThatPropagatorMayNotReachFixedPointInOnePass(id);
 }
 
+
+// MPS : Pretraitement des tâches avant la propagation.
+namespace {
+std::ostream& VilimLog() {
+  return std::cerr;
+}
+} 
 bool CumulativeEnergyConstraint::Propagate() {
+  static int num_appel = 0;  // MPS
+  const int appel = ++num_appel;
+  std::ostream& vlog = VilimLog(); 
+  vlog << "[EN appel " << appel
+     << " | niveau=" << trail_->CurrentDecisionLevel()
+     << "]\n";
+
   if (!helper_->IsEnforced()) return true;
-  // This only uses one time direction, but the helper might be used elsewhere.
-  // TODO(user): just keep the current direction?
+
   if (!helper_->SynchronizeAndSetTimeDirection(true)) return false;
+
   if (!demands_->CacheAllEnergyValues()) return true;
 
   const IntegerValue capacity_max = integer_trail_->UpperBound(capacity_);
-  // TODO(user): force capacity_max >= 0, fail/remove optionals when 0.
   if (capacity_max <= 0) return true;
+   // MPS : afficher une fois par instance les taches, leurs modes, EST et LCT
+  static bool deja_affiche = false;
+  if (!deja_affiche) {
+    deja_affiche = true;
+    vlog << "==========================================================\n";
+    vlog << "=== Taches (capacite max=" << capacity_max << ")\n";
+    for (int t = 0; t < helper_->NumTasks(); ++t) {
+      vlog << "  tache=" << t << " EST=" << helper_->StartMin(t)
+           << " LCT=" << helper_->EndMax(t) << " energie=["
+           << demands_->EnergyMin(t) << ", " << demands_->EnergyMax(t) << "]"
+           << (helper_->IsAbsent(t) ? " ABSENTE" : "") << "\n";
+      const auto& modes = demands_->DecomposedEnergies()[t];
+      if (modes.empty()) {
+         vlog << "    duree=[" << helper_->SizeMin(t) << "," << helper_->SizeMax(t)
+         << "] demande=[" << demands_->DemandMin(t) << ","
+         << demands_->DemandMax(t) << "]\n";
+      }
+      for (const auto [lit, fixed_size, fixed_demand] : modes) {
+        vlog << "    duree=" << fixed_size << " demande=" << fixed_demand
+             << " energie=" << (fixed_size * fixed_demand) << "\n";
+      }
+    }
+    vlog << "==========================================================\n";
+  }
+  // MPS : trace des decisions de branchement et de l'etat des domaines
+  {
+    static std::map<const void*, int> dernier_niveau;
+    const int niveau = trail_->CurrentDecisionLevel();
+    auto [it, nouveau] = dernier_niveau.try_emplace(this, -1);
+    if (niveau != it->second) {
+      if (!nouveau && niveau < it->second) {
+        vlog << "<<< RETOUR ARRIERE : niveau " << it->second << " -> "
+             << niveau << "\n";
+      }
+      it->second = niveau;
+      const auto& assignment = trail_->Assignment();
 
-  // Set up theta tree.
+      vlog << ">>> [appel " << appel << "] niveau=" << niveau
+           << " (instance=" << this << ")\n";
+      vlog << "    decisions en cours :\n";
+      for (int i = 0; i < trail_->Index(); ++i) {
+        const Literal l = (*trail_)[i];
+        if (trail_->AssignmentType(l.Variable()) !=
+            AssignmentType::kSearchDecision) {
+          continue;
+        }
+        vlog << "      niveau " << trail_->Info(l.Variable()).level << " : "
+             << l.DebugString() << "  = " << MpsDecrireDecision(model_, l);
+        for (int t = 0; t < helper_->NumTasks(); ++t) {
+          for (const auto [mlit, d, r] : demands_->DecomposedEnergies()[t]) {
+            if (l == mlit) {
+              vlog << "  (tache " << t << " : mode " << d << "x" << r
+                   << " CHOISI)";
+            } else if (l == mlit.Negated()) {
+              vlog << "  (tache " << t << " : mode " << d << "x" << r
+                   << " EXCLU)";
+            }
+          }
+        }
+        vlog << "\n";
+      }
+
+      vlog << "    etat des taches :\n";
+      for (int t = 0; t < helper_->NumTasks(); ++t) {
+        vlog << "      tache=" << t
+             << " EST=" << helper_->StartMin(t)
+             << " LST=" << helper_->StartMax(t)
+             << " ECT=" << helper_->EndMin(t)
+             << " LCT=" << helper_->EndMax(t)
+             << " duree=[" << helper_->SizeMin(t) << "," << helper_->SizeMax(t) << "]"
+             << " demande=[" << demands_->DemandMin(t) << ","
+             << demands_->DemandMax(t) << "]"
+             << " energie=[" << demands_->EnergyMin(t) << ","
+             << demands_->EnergyMax(t) << "]"
+             << (helper_->IsAbsent(t) ? " ABSENTE" : "") << "\n";
+        for (const auto [mlit, d, r] : demands_->DecomposedEnergies()[t]) {
+          vlog << "        mode " << d << "x" << r << " energie=" << d * r
+               << (assignment.LiteralIsFalse(mlit)  ? " [EXCLU]"
+                   : assignment.LiteralIsTrue(mlit) ? " [CHOISI]"
+                                                    : "")
+               << "\n";
+        }
+      }
+    }
+  }
   start_event_task_time_.clear();
   int num_events = 0;
   for (const auto task_time : helper_->TaskByIncreasingStartMin()) {
@@ -106,12 +204,52 @@ bool CumulativeEnergyConstraint::Propagate() {
     start_event_task_time_.emplace_back(task_time);
     task_to_start_event_[task] = num_events;
     num_events++;
-  }
+  }  // MPS : fin de la construction des evenements
+
+  // MPS : affichage des energies des modes (debug)
+  const auto print_mode_energies = [&](const char* titre) {
+    vlog << titre << "\n";
+    const auto& assignment = trail_->Assignment();
+    const int num_tasks = helper_->NumTasks();
+    for (int t = 0; t < num_tasks; ++t) {
+      const auto& task_energies = demands_->DecomposedEnergies()[t];
+      if (task_energies.empty()) {
+        vlog << "  tache=" << t << " : Aucune energie disponible\n";
+        continue;
+      }
+      vlog << "  tache=" << t << " : " << task_energies.size()
+                << " modes:\n";
+      for (const auto [lit, fixed_size, fixed_demand] : task_energies) {
+        vlog << "    duree=" << fixed_size
+                  << " demande=" << fixed_demand
+                  << " energie=" << (fixed_size * fixed_demand);
+        if (assignment.LiteralIsFalse(lit)) {
+          const BooleanVariable v = lit.Variable();
+          const int type = trail_->AssignmentType(v);
+          vlog << " [EXCLU niveau=" << trail_->Info(v).level;
+          if (type == AssignmentType::kSearchDecision) {
+            vlog << " DECISION de recherche";
+          } else if (type == AssignmentType::kUnitReason) {
+            vlog << " fixe a la racine (unitaire)";
+          } else {
+            vlog << " propage (type=" << type
+                 << (type == integer_trail_->PropagatorId() ? ", propagateur entier" : "")
+                 << ") raison:";
+            for (const Literal r : trail_->Reason(v)) vlog << " " << r.DebugString();
+          }
+          vlog << "]";
+        } else if (assignment.LiteralIsTrue(lit)) {
+          vlog << " [CHOISI]";
+        }
+        vlog << "\n";
+      }
+    }
+  };
+
   start_event_is_present_.assign(num_events, false);
   theta_tree_.Reset(num_events);
-
   bool tree_has_mandatory_intervals = false;
-
+  bool vilim_declenche = false;
   const IntegerValue start_end_magnitude =
       std::max(IntTypeAbs(helper_->EndMax(
                    helper_->TaskByDecreasingEndMax().front().task_index)),
@@ -120,13 +258,11 @@ bool CumulativeEnergyConstraint::Propagate() {
     return true;
   }
 
-  // Main loop: insert tasks by increasing end_max, check for overloads.
   const auto by_decreasing_end_max = helper_->TaskByDecreasingEndMax();
   for (const auto [current_task, current_end] :
        ::gtl::reversed_view(by_decreasing_end_max)) {
     if (task_to_start_event_[current_task] == -1) continue;
 
-    // Add the current task to the tree.
     {
       const int current_event = task_to_start_event_[current_task];
       const IntegerValue start_min = start_event_task_time_[current_event].time;
@@ -135,20 +271,26 @@ bool CumulativeEnergyConstraint::Propagate() {
       if (is_present) {
         tree_has_mandatory_intervals = true;
         theta_tree_.AddOrUpdateEvent(current_event, start_min * capacity_max,
-                                     demands_->EnergyMin(current_task),
-                                     demands_->EnergyMax(current_task));
+                                      demands_->EnergyMin(current_task),
+                                      demands_->EnergyMax(current_task));
       } else {
         theta_tree_.AddOrUpdateOptionalEvent(current_event,
-                                             start_min * capacity_max,
-                                             demands_->EnergyMax(current_task));
+                                              start_min * capacity_max,
+                                              demands_->EnergyMax(current_task));
       }
     }
-
+    // MPS : On parcourt les tâches par LCT croissant. Pour le LCT courant, on
+    // considère les fenêtres [EST_j, LCT_courant] où j est une tâche déjà insérée.
+    // Le theta-tree donne la fenêtre la plus surchargée (par rapport à
+    // capacity_max) et les tâches obligatoires dont EST >= EST_j et
+    // LCT <= LCT_courant doivent s'y exécuter, donc on doit avoir
+    // capacité >= ceil(énergie_min / (LCT_courant - EST_j)). Sinon, on réduit la capacitéé
+    // si elle est variable, ou on a un conflit si elle est fixe.
     if (tree_has_mandatory_intervals) {
-      // Find the critical interval.
       const IntegerValue envelope = theta_tree_.GetEnvelope();
       const int critical_event =
           theta_tree_.GetMaxEventWithEnvelopeGreaterThan(envelope - 1);
+
       const IntegerValue window_start =
           start_event_task_time_[critical_event].time;
       const IntegerValue window_end = current_end;
@@ -157,12 +299,6 @@ bool CumulativeEnergyConstraint::Propagate() {
       const IntegerValue new_capacity_min =
           CeilRatio(envelope - window_start * capacity_max, window_size);
 
-      // Push the new capacity min, note that this can fail if it go above the
-      // maximum capacity.
-      //
-      // TODO(user): We do not need the capacity max in the reason, but by using
-      // a lower one, we could maybe have propagated more the minimum capacity.
-      // investigate.
       if (new_capacity_min > integer_trail_->LowerBound(capacity_)) {
         helper_->ResetReason();
         for (int event = critical_event; event < num_events; event++) {
@@ -185,18 +321,14 @@ bool CumulativeEnergyConstraint::Propagate() {
       }
     }
 
-    // Reduce energy of all tasks whose max energy would exceed an interval
-    // ending at current_end.
+    if (theta_tree_.GetOptionalEnvelope() > current_end * capacity_max){
+      vilim_declenche = true;
+      vlog << "[appel " << appel << "] Algo de Vilim declenche (niveau="
+           << trail_->CurrentDecisionLevel() << ")\n";
+      print_mode_energies("Energies des modes au declenchement de l'algo");
+    }
+    // MPS : VILIM COMMENCE ICI 
     while (theta_tree_.GetOptionalEnvelope() > current_end * capacity_max) {
-      // Some task's max energy is too high, reduce its maximal energy.
-      // Explain with tasks present in the critical interval.
-      // If it is optional, it might get excluded, in that case,
-      // remove it from the tree.
-      // TODO(user): This could be done lazily.
-      // TODO(user): the same required task can have its energy pruned
-      // several times, making this algorithm O(n^2 log n). Is there a way
-      // to get the best pruning in one go? This looks like edge-finding not
-      // being able to converge in one pass, so it might not be easy.
       helper_->ResetReason();
       int critical_event;
       int event_with_new_energy_max;
@@ -204,20 +336,33 @@ bool CumulativeEnergyConstraint::Propagate() {
       theta_tree_.GetEventsWithOptionalEnvelopeGreaterThan(
           current_end * capacity_max, &critical_event,
           &event_with_new_energy_max, &new_energy_max);
+      const int task_for_old_energy =
+          start_event_task_time_[event_with_new_energy_max].task_index;
+      
+      vlog << " envelope=" << theta_tree_.GetOptionalEnvelope()
+                << " critical_event=" << critical_event
+                << " task=" << task_for_old_energy
+                << " old_energy_max=" << demands_->EnergyMax(task_for_old_energy)
+                << " new_energy_max=" << new_energy_max << "\n";
 
       const IntegerValue window_start =
           start_event_task_time_[critical_event].time;
-
-      // TODO(user): Improve window_end using envelope of critical event.
       const IntegerValue window_end = current_end;
+
+      // MPS : taches de l'explication
+      vlog << "[appel " << appel << "] fenetre=[" << window_start << ", "
+                << window_end << "] taches de l'explication :\n";
       for (int event = critical_event; event < num_events; event++) {
         if (start_event_is_present_[event]) {
-          if (event == event_with_new_energy_max) continue;
           const int task = start_event_task_time_[event].task_index;
+          vlog << "    tache=" << task
+                    << " EST=" << helper_->StartMin(task)
+                    << " LCT=" << helper_->EndMax(task)
+                    << " energie_min=" << demands_->EnergyMin(task) << "\n";
           helper_->AddPresenceReason(task);
+          demands_->AddEnergyMinReason(task);
           helper_->AddStartMinReason(task, window_start);
           helper_->AddEndMaxReason(task, window_end);
-          demands_->AddEnergyMinReason(task);
         }
       }
       if (capacity_.var != kNoIntegerVariable) {
@@ -230,24 +375,33 @@ bool CumulativeEnergyConstraint::Propagate() {
       helper_->AddStartMinReason(task_with_new_energy_max, window_start);
       helper_->AddEndMaxReason(task_with_new_energy_max, window_end);
       if (!demands_->DecreaseEnergyMax(task_with_new_energy_max,
-                                       new_energy_max)) {
+                                        new_energy_max)) {
+        vlog << "[appel " << appel << "] CONFLIT dans DecreaseEnergyMax\n";
         return false;
       }
+
+      vlog << " Apres DecreaseEnergyMax: tache="
+                << task_with_new_energy_max
+                << " energy_max=" << demands_->EnergyMax(task_with_new_energy_max) << "\n";
 
       if (helper_->IsPresent(task_with_new_energy_max)) {
         theta_tree_.AddOrUpdateEvent(
             task_to_start_event_[task_with_new_energy_max],
             start_event_task_time_[event_with_new_energy_max].time *
                 capacity_max,
-            demands_->EnergyMin(task_with_new_energy_max), new_energy_max);
+            demands_->EnergyMin(task_with_new_energy_max),
+            new_energy_max);
       } else {
         theta_tree_.RemoveEvent(event_with_new_energy_max);
       }
     }
   }
-  return true;
-}
-
+   if (vilim_declenche) {
+    vlog << "[appel " << appel << "] ";
+    print_mode_energies("Energies des modes differents APRES l'algo");
+  }
+    return true;
+  }
 CumulativeIsAfterSubsetConstraint::CumulativeIsAfterSubsetConstraint(
     IntegerVariable var, AffineExpression capacity,
     const std::vector<int>& subtasks, absl::Span<const IntegerValue> offsets,

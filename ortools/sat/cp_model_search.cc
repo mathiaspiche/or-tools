@@ -463,9 +463,88 @@ std::function<BooleanOrIntegerLiteral()> InstrumentSearchStrategy(
 
   std::vector<std::pair<int64_t, int64_t>> old_domains(variable_mapping.size());
   return [instrumented_strategy, model, variable_mapping, &cp_model_proto,
-          old_domains, ref_to_display]() mutable {
-    const BooleanOrIntegerLiteral decision = instrumented_strategy();
-    if (!decision.HasValue()) return decision;
+        old_domains, ref_to_display]() mutable {
+
+  const Trail* trail = model->Get<Trail>();
+  IntegerTrail* integer_trail = model->GetOrCreate<IntegerTrail>();
+  const int level = trail->CurrentDecisionLevel();
+
+  // ============================================================
+  // SNAPSHOT AVANT LA PROCHAINE DECISION
+  // ============================================================
+
+  LOG(INFO) << "";
+  LOG(INFO) << "================ "
+            << (level == 0 ? "ROOT" : absl::StrCat("NODE ", level))
+            << " AFTER PROPAGATION ================";
+
+  for (int t = 0; t < 3; ++t) {
+    LOG(INFO) << "task " << t;
+
+    const std::string start_name = absl::StrCat("start_", t);
+    const std::string end_name = absl::StrCat("end_", t);
+    const std::string duration_name = absl::StrCat("t", t, "_duration");
+    const std::string demand_name = absl::StrCat("t", t, "_demand");
+
+    bool duration_found = false;
+    bool demand_found = false;
+
+    for (int ref = 0; ref < cp_model_proto.variables_size(); ++ref) {
+      if (variable_mapping[ref] == kNoIntegerVariable) continue;
+
+      const std::string& name = cp_model_proto.variables(ref).name();
+      const IntegerVariable var = variable_mapping[ref];
+
+      if (name == start_name) {
+        LOG(INFO) << "  start    = ["
+                  << integer_trail->LowerBound(var).value()
+                  << ","
+                  << integer_trail->UpperBound(var).value()
+                  << "]";
+      }
+
+      if (name == end_name) {
+        LOG(INFO) << "  end      = ["
+                  << integer_trail->LowerBound(var).value()
+                  << ","
+                  << integer_trail->UpperBound(var).value()
+                  << "]";
+      }
+
+      if (name == duration_name) {
+        LOG(INFO) << "  duration = ["
+                  << integer_trail->LowerBound(var).value()
+                  << ","
+                  << integer_trail->UpperBound(var).value()
+                  << "]";
+        duration_found = true;
+      }
+
+      if (name == demand_name) {
+        LOG(INFO) << "  demand   = ["
+                  << integer_trail->LowerBound(var).value()
+                  << ","
+                  << integer_trail->UpperBound(var).value()
+                  << "]";
+        demand_found = true;
+      }
+    }
+
+    if (!duration_found && (t == 1 || t == 2)) {
+      LOG(INFO) << "  duration = [2,2]";
+    }
+
+    if (!demand_found && (t == 1 || t == 2)) {
+      LOG(INFO) << "  demand   = [2,2]";
+    }
+  }
+
+  LOG(INFO) << "========================================================";
+
+  // ONLY AFTER PRINTING:
+  const BooleanOrIntegerLiteral decision = instrumented_strategy();
+
+  if (!decision.HasValue()) return decision;
 
     if (decision.boolean_literal_index != kNoLiteralIndex) {
       const Literal l = Literal(decision.boolean_literal_index);
@@ -480,10 +559,8 @@ std::function<BooleanOrIntegerLiteral()> InstrumentSearchStrategy(
     } else {
       LOG(INFO) << "Integer decision " << decision.integer_literal;
     }
-    const int level = model->Get<Trail>()->CurrentDecisionLevel();
     std::string to_display =
         absl::StrCat("Diff since last call, level=", level, "\n");
-    IntegerTrail* integer_trail = model->GetOrCreate<IntegerTrail>();
     for (const int ref : ref_to_display) {
       const IntegerVariable var = variable_mapping[ref];
       const std::pair<int64_t, int64_t> new_domain(

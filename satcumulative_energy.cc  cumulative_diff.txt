@@ -1,0 +1,71 @@
+[1mdiff --git a/ortools/sat/cumulative_energy.cc b/ortools/sat/cumulative_energy.cc[m
+[1mindex f3e6845156..a8660aff46 100644[m
+[1m--- a/ortools/sat/cumulative_energy.cc[m
+[1m+++ b/ortools/sat/cumulative_energy.cc[m
+[36m@@ -83,18 +83,32 @@[m [mvoid CumulativeEnergyConstraint::RegisterWith(GenericLiteralWatcher* watcher) {[m
+   watcher->NotifyThatPropagatorMayNotReachFixedPointInOnePass(id);[m
+ }[m
+ [m
+[32m+[m
+[32m+[m[32m// MPS : Pretraitement des tâches avant la propagation.[m
+[32m+[m
+ bool CumulativeEnergyConstraint::Propagate() {[m
+[31m-  if (!helper_->IsEnforced()) return true;[m
+[32m+[m
+[32m+[m
+[32m+[m[32m  // Si la contrainte n'est pas enforcée, on ne fait pas de propagation. (de ce qu'on[m[41m [m
+[32m+[m[32m  // a parlé avec C-G)[m
+[32m+[m[32m  if (!helper_->IsEnforced()) return true;[m[41m [m
+[32m+[m
+[32m+[m
+   // This only uses one time direction, but the helper might be used elsewhere.[m
+   // TODO(user): just keep the current direction?[m
+   if (!helper_->SynchronizeAndSetTimeDirection(true)) return false;[m
+[32m+[m
+[32m+[m[32m  // MPS : Si une tâche n'a plus de modes valides ou erreur de bornes (genre rreq > kIntegerValue),[m[41m [m
+[32m+[m[32m  // on ne fait pas de propagation.[m[41m [m
+   if (!demands_->CacheAllEnergyValues()) return true;[m
+ [m
+[32m+[m[32m  // MPS : On va chercher la capacité max de l'intervalle, si elle est <= 0, on ne fait pas de propagation.[m
+   const IntegerValue capacity_max = integer_trail_->UpperBound(capacity_);[m
+   // TODO(user): force capacity_max >= 0, fail/remove optionals when 0.[m
+   if (capacity_max <= 0) return true;[m
+ [m
+   // Set up theta tree.[m
+[32m+[m[32m  //[m[41m [m
+   start_event_task_time_.clear();[m
+   int num_events = 0;[m
+   for (const auto task_time : helper_->TaskByIncreasingStartMin()) {[m
+[36m@@ -108,8 +122,10 @@[m [mbool CumulativeEnergyConstraint::Propagate() {[m
+     num_events++;[m
+   }[m
+   start_event_is_present_.assign(num_events, false);[m
+[31m-  theta_tree_.Reset(num_events);[m
+ [m
+[32m+[m
+[32m+[m
+[32m+[m[32m  theta_tree_.Reset(num_events);[m
+   bool tree_has_mandatory_intervals = false;[m
+ [m
+   const IntegerValue start_end_magnitude =[m
+[36m@@ -147,8 +163,10 @@[m [mbool CumulativeEnergyConstraint::Propagate() {[m
+     if (tree_has_mandatory_intervals) {[m
+       // Find the critical interval.[m
+       const IntegerValue envelope = theta_tree_.GetEnvelope();[m
+[32m+[m[32m      // Trouver l'évènement qui définit l'enveloppe critique[m
+       const int critical_event =[m
+           theta_tree_.GetMaxEventWithEnvelopeGreaterThan(envelope - 1);[m
+[32m+[m
+       const IntegerValue window_start =[m
+           start_event_task_time_[critical_event].time;[m
+       const IntegerValue window_end = current_end;[m
+[36m@@ -239,7 +257,8 @@[m [mbool CumulativeEnergyConstraint::Propagate() {[m
+             task_to_start_event_[task_with_new_energy_max],[m
+             start_event_task_time_[event_with_new_energy_max].time *[m
+                 capacity_max,[m
+[31m-            demands_->EnergyMin(task_with_new_energy_max), new_energy_max);[m
+[32m+[m[32m            demands_->EnergyMin(task_with_new_energy_max),[m[41m [m
+[32m+[m[32m            new_energy_max);[m
+       } else {[m
+         theta_tree_.RemoveEvent(event_with_new_energy_max);[m
+       }[m
