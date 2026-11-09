@@ -1,1 +1,0 @@
-ersmathior-tools --no-pager diff ortools/sat/cp_model_search.cc
