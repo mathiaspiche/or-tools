@@ -157,6 +157,11 @@ class TimeTablingPerTask : public PropagatorInterface {
   // ReverseVariables to update the maximum end time of each task.
   bool SweepAllTasks();
 
+  bool RunSweep();
+  bool SweepAllTasksModes();
+  bool SweepTaskModes(int t, IntegerValue est,
+                      const std::vector<LiteralValueValue>& modes);
+
   // Tries to increase the minimum start time of task_id. This assumes tasks are
   // processed by increasing start_min so that the starting profile_index only
   // increase.
@@ -188,6 +193,10 @@ class TimeTablingPerTask : public PropagatorInterface {
   // Returns true if the tasks is present and has a mantatory part.
   // This is only valid after BuildProfile() has been called.
   bool IsInProfile(int t) const { return cached_demands_min_[t] > 0; }
+  
+  // MPS : explications naives
+  void AddNaiveReason(int task_id);
+  void AddFalseModesReason(int task_id);
 
   // Number of tasks.
   const int num_tasks_;
@@ -198,7 +207,8 @@ class TimeTablingPerTask : public PropagatorInterface {
   SchedulingConstraintHelper* helper_;
   SchedulingDemandHelper* demands_;
   IntegerTrail* integer_trail_;
-
+  const Trail* trail_; 
+  
   // Optimistic profile of the resource consumption over time.
   std::vector<ProfileRectangle> profile_;
   IntegerValue profile_max_height_;
