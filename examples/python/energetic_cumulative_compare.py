@@ -7,24 +7,68 @@ from ortools.sat.python import cp_model
 print("TT_MODES =", os.environ.get("TT_MODES"))
 flags.FLAGS(["energetic_cumulative_compare.py"])
 
-HORIZON = 60
-CAPACITIES = [3]
+HORIZON = 143   # sum of the longest mode of each task
+# Resources 1-2 are renewable (rtype 1) -> add_cumulative.
+# Resources 3-5 are non-renewable (rtype 2) -> sum over tasks of demand <= cap.
+CAPACITIES = [18, 13, 39, 41, 73]
+RENEWABLE = [True, True, False, False, False]
+
 TASKS_MODES = [
-    [(12, [1])],                 
-    [(1, [1])],                  
-    [(1, [1])],                  
-    [(1, [1])],                  
-    [(1, [3]), (3, [2])],        
-]
-TASK_WINDOWS = [
-    (0, 0, 12, 12),
-    (2, 2, 3, 3),
-    (5, 5, 6, 6),
-    (8, 8, 9, 9),
-    (0, 9, 1, 12),
+    # task 1
+    [(7, [0, 5, 0, 9, 9]), (8, [6, 0, 8, 0, 0]), (9, [3, 0, 7, 0, 8])],
+    # task 2  (dup dur)
+    [(4, [0, 6, 3, 2, 0]), (8, [4, 0, 0, 2, 0]), (8, [4, 0, 0, 0, 7])],
+    # task 3
+    [(1, [10, 0, 0, 7, 9]), (2, [5, 0, 0, 5, 0]), (9, [0, 3, 4, 3, 0])],
+    # task 4
+    [(4, [0, 6, 0, 0, 6]), (7, [0, 4, 0, 3, 0]), (10, [6, 0, 0, 0, 5])],
+    # task 5  (dup dur)
+    [(5, [0, 6, 3, 0, 4]), (5, [4, 0, 0, 0, 6]), (6, [2, 0, 0, 0, 2])],
+    # task 6
+    [(2, [9, 0, 0, 0, 6]), (3, [0, 10, 0, 0, 2]), (10, [0, 8, 0, 6, 0])],
+    # task 7
+    [(2, [10, 0, 0, 0, 9]), (6, [0, 7, 0, 7, 8]), (7, [0, 1, 8, 0, 6])],
+    # task 8  (dup dur)
+    [(4, [8, 0, 0, 6, 0]), (4, [0, 1, 7, 0, 4]), (10, [8, 0, 0, 0, 4])],
+    # task 9  (dup dur)
+    [(6, [6, 0, 0, 3, 0]), (10, [0, 9, 0, 0, 6]), (10, [4, 0, 9, 0, 0])],
+    # task 10
+    [(5, [0, 7, 0, 7, 10]), (6, [0, 7, 7, 7, 0]), (10, [0, 6, 6, 0, 0])],
+    # task 11
+    [(1, [1, 0, 0, 0, 7]), (7, [0, 2, 7, 0, 6]), (9, [0, 2, 6, 2, 5])],
+    # task 12
+    [(5, [0, 8, 5, 0, 10]), (8, [0, 5, 0, 2, 7]), (10, [8, 0, 0, 1, 6])],
+    # task 13
+    [(3, [9, 0, 0, 0, 7]), (5, [8, 0, 0, 5, 7]), (8, [6, 0, 0, 3, 6])],
+    # task 14
+    [(1, [0, 9, 0, 9, 7]), (3, [6, 0, 3, 4, 0]), (10, [0, 6, 2, 0, 0])],
+    # task 15
+    [(1, [7, 0, 0, 5, 8]), (6, [7, 0, 0, 4, 8]), (8, [0, 9, 0, 0, 4])],
+    # task 16
+    [(4, [6, 0, 9, 0, 0]), (7, [0, 5, 6, 6, 6]), (9, [0, 1, 5, 0, 0])],
 ]
 
-PRECEDENCES = []
+TASK_WINDOWS = [
+    (0, HORIZON - min(d for d, _ in m), min(d for d, _ in m), HORIZON)
+    for m in TASKS_MODES
+]
+
+# 0-based (task i ends before task j starts), converted from succ
+PRECEDENCES = [
+    (0, 3), (0, 8), (0, 12),
+    (1, 3), (1, 8), (1, 13),
+    (2, 3), (2, 4),
+    (3, 10),
+    (4, 5), (4, 6), (4, 10),
+    (5, 13), (5, 15),
+    (6, 7), (6, 9), (6, 13),
+    (7, 8), (7, 11),
+    (8, 14), (8, 15),
+    (9, 11), (9, 12),
+    (10, 11),
+    (11, 14),
+    (12, 14), (12, 15),
+]
 
 
 def build_model():
@@ -52,12 +96,17 @@ def build_model():
 
             duration = model.new_int_var_from_domain(
                 cp_model.Domain.from_values(durations), f"t{i}_duration")
-            # MPS : equivalence mode <=> duree (une seule fois, hors de la boucle des ressources)
+            groups = {}
             for m, (d, _) in enumerate(modes):
                 model.add(duration == d).only_enforce_if(literals[m])
-                model.add(duration != d).only_enforce_if(literals[m].negated())
+                groups.setdefault(d, []).append(literals[m])
+            for d, grp in groups.items():
+                # fires only when every mode with this duration is false
+                model.add(duration != d).only_enforce_if([l.negated() for l in grp])
 
             for k in range(num_res):
+                if not RENEWABLE[k]:
+                    continue
                 values_k = [req[k] for _, req in modes]
                 demand_k = model.new_int_var_from_domain(
                     cp_model.Domain.from_values(values_k), f"t{i}_demand_r{k}")
@@ -65,10 +114,13 @@ def build_model():
                     model.add(demand_k == req[k]).only_enforce_if(literals[m])
                 demands[k].append(demand_k)
         else:
+            literals = None
             duration = durations[0]
             for k in range(num_res):
-                demands[k].append(model.new_constant(modes[0][1][k]))
+                if RENEWABLE[k]:
+                    demands[k].append(model.new_constant(modes[0][1][k]))
 
+        mode_lits.setdefault(i, literals)
         intervals.append(model.new_interval_var(start, duration, end, f"t{i}_interval"))
         starts.append(start)
         ends.append(end)
@@ -77,7 +129,16 @@ def build_model():
         model.add(ends[a] <= starts[b])
 
     for k in range(num_res):
-        model.add_cumulative(intervals, demands[k], CAPACITIES[k])
+        if RENEWABLE[k]:
+            model.add_cumulative(intervals, demands[k], CAPACITIES[k])
+        else:
+            total = 0
+            for i, modes in enumerate(TASKS_MODES):
+                if mode_lits[i] is None:
+                    total += modes[0][1][k]
+                else:
+                    total += sum(l * req[k] for l, (_, req) in zip(mode_lits[i], modes))
+            model.add(total <= CAPACITIES[k])
 
     makespan = model.new_int_var(0, HORIZON, "makespan")
     model.add_max_equality(makespan, ends)
@@ -107,7 +168,7 @@ def solve_and_report(use_overload_checker: bool, log_path: str):
     solver.parameters.log_search_progress = True
     solver.parameters.log_to_stdout = False      # log seulement dans le fichier
     solver.parameters.log_subsolver_statistics = False
-    solver.parameters.cp_model_presolve = False
+    solver.parameters.cp_model_presolve = True
     solver.parameters.cp_model_probing_level = 0
     solver.parameters.linearization_level = 0
     solver.parameters.symmetry_level = 0
