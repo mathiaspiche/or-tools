@@ -32,14 +32,27 @@
 namespace operations_research {
 namespace sat {
 
-constexpr bool TTAvecExplicationsNaives = false;
+namespace {
+struct ModeStats {
+  long long eliminated = 0;
+  long long best_raised = 0;
+  ~ModeStats() {
+    std::cerr << "[TT-modes] modes eliminated=" << eliminated
+              << " est raised=" << best_raised << "\n";
+  }
+};
+ModeStats g_mode_stats;
+}   
+
+constexpr bool TTAvecExplicationsNaives = true;
 
 bool TimeTablingPerTask::RunSweep() {
-  const char* e = std::getenv("TT_MODES");
-  const bool use_modes = (e != nullptr && e[0] == '1');
+  static const bool use_modes = [] {
+    const char* e = std::getenv("TT_MODES");
+    return e != nullptr && e[0] == '1';
+  }();
   return use_modes ? SweepAllTasksModes() : SweepAllTasks();
 }
-
 
 void AddReservoirConstraint(absl::Span<const Literal> enforcement_literals,
                             absl::Span<const AffineExpression> times,
@@ -431,52 +444,11 @@ void TimeTablingPerTask::RegisterWith(GenericLiteralWatcher* watcher) {
 }
 
 
-// Note that we rely on being called again to reach a fixed point.
 bool TimeTablingPerTask::Propagate() {
   if (!helper_->IsEnforced()) return true;
 
-  // MPS : snapshot des bornes pour afficher ce que le timetabling filtre
-  if (!helper_->SynchronizeAndSetTimeDirection(true)) return false;
-  static int num_appel_tt = 0;
-  const int appel_tt = ++num_appel_tt;
-  const int n = helper_->NumTasks();
-  std::vector<IntegerValue> est(n), lct(n), dmin(n), dmax(n);
-  std::vector<bool> absent(n);
-  for (int t = 0; t < n; ++t) {
-    est[t] = helper_->StartMin(t);
-    lct[t] = helper_->EndMax(t);
-    dmin[t] = demands_->DemandMin(t);
-    dmax[t] = demands_->DemandMax(t);
-    absent[t] = helper_->IsAbsent(t);
-  }
-  struct MpsAuSortie {
-    std::function<void()> f;
-    ~MpsAuSortie() { f(); }
-  };
-  MpsAuSortie afficher_filtrage{[&] {
-    helper_->SetTimeDirection(true); 
-    for (int t = 0; t < n; ++t) {
-      const bool change = helper_->StartMin(t) != est[t] ||
-                          helper_->EndMax(t) != lct[t] ||
-                          demands_->DemandMin(t) != dmin[t] ||
-                          demands_->DemandMax(t) != dmax[t] ||
-                          helper_->IsAbsent(t) != absent[t];
-      if (!change) continue;
-      std::cerr << "[TT appel " << appel_tt << "] tache=" << t
-                << " EST " << est[t] << "->" << helper_->StartMin(t)
-                << " LCT " << lct[t] << "->" << helper_->EndMax(t)
-                << " demande [" << dmin[t] << "," << dmax[t] << "]->["
-                << demands_->DemandMin(t) << "," << demands_->DemandMax(t) << "]"
-                << (helper_->IsAbsent(t) && !absent[t] ? " -> ABSENTE" : "")
-                           << "\n";
-    }
-  }};
-
   // This can fail if the profile exceeds the resource capacity.
-  if (!BuildProfile()) {
-    std::cerr << "[TT appel " << appel_tt << "] CONFLIT (profil > capacite)\n";
-    return false;
-  }
+  if (!BuildProfile()) return false;
 
   // Update the minimum start times.
   if (!RunSweep()) return false;
@@ -694,10 +666,10 @@ bool TimeTablingPerTask::SweepTaskModes(
     }
 
     if (!feasible) {
-      std::cerr << "[TT-modes] tache=" << t << " mode(duree=" << size
-                << ", demande=" << demand << ") elimine\n";
+      ++g_mode_stats.eliminated;
       helper_->ResetReason();
       AddNaiveReason(t);
+      
       if (!helper_->PushLiteral(lit.Negated())) return false;
       continue;
     }
@@ -714,6 +686,7 @@ bool TimeTablingPerTask::SweepTaskModes(
     helper_->ResetReason();
     AddNaiveReason(t);
     AddFalseModesReason(t);
+    ++g_mode_stats.best_raised;
     if (!helper_->IncreaseStartMin(t, best)) return false;
   }
   return true;
