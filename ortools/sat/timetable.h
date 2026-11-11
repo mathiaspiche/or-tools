@@ -195,7 +195,7 @@ class TimeTablingPerTask : public PropagatorInterface {
   bool IsInProfile(int t) const { return cached_demands_min_[t] > 0; }
   
   // MPS : explications naives
-  void AddNaiveReason(int task_id);
+  void AjouterRaisonNaive(int task_id);
   void AddFalseModesReason(int task_id);
 
   // Number of tasks.
