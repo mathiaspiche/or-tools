@@ -40,6 +40,42 @@ bool TimeTablingPerTask::RunSweep() {
     const char* e = std::getenv("TT_MODES");
     return e != nullptr && e[0] == '1';
   }();
+  static const bool trace = [] {
+    const char* e = std::getenv("TT_TRACE");
+    return e != nullptr && e[0] == '1';
+  }();
+  
+  std::ostream& out = std::cerr;
+  
+  if (trace) {
+    out << "[TT] RunSweep " << (use_modes ? "MODES" : "STOCK")
+        << " sens=" << (helper_->CurrentTimeIsForward() ? "avant" : "inverse")
+        << " niveau=" << helper_->CurrentDecisionLevel() << "\n";
+    const auto& assignment = trail_->Assignment();
+    for (int t = 0; t < num_tasks_; ++t) {
+      if (helper_->IsAbsent(t)) {
+        out << "  t=" << t << " ABSENTE\n";
+        continue;
+      }
+      out << "  t=" << t << (helper_->IsPresent(t) ? "" : " (optionnelle)")
+          << " start=[" << helper_->StartMin(t) << "," << helper_->StartMax(t) << "]"
+          << " end=[" << helper_->EndMin(t) << "," << helper_->EndMax(t) << "]"
+          << " duree=[" << helper_->SizeMin(t) << "," << helper_->SizeMax(t) << "]"
+          << " demande=[" << demands_->DemandMin(t) << "," << demands_->DemandMax(t) << "]";
+      if (t < static_cast<int>(demands_->DecomposedEnergies().size()) &&
+          !demands_->DecomposedEnergies()[t].empty()) {
+        out << " modes:";
+        for (const auto& [lit, size, demand] : demands_->DecomposedEnergies()[t]) {
+          out << " (d=" << size << ",h=" << demand << ")="
+              << (assignment.LiteralIsTrue(lit)    ? "1"
+                  : assignment.LiteralIsFalse(lit) ? "0" : "?");
+        }
+      }
+      out << "\n";
+    }
+    out << std::flush;
+  }
+
   return use_modes ? SweepAllTasksModes() : SweepAllTasks();
 }
 

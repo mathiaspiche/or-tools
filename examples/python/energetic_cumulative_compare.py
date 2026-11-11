@@ -125,7 +125,7 @@ def solve_and_report(use_overload_checker: bool, log_path: str):
     solver.parameters.log_search_progress = True
     solver.parameters.log_to_stdout = False      # log seulement dans le fichier
     solver.parameters.log_subsolver_statistics = False
-    solver.parameters.cp_model_presolve = True
+    solver.parameters.cp_model_presolve = False
     solver.parameters.cp_model_probing_level = 0
     solver.parameters.linearization_level = 0
     solver.parameters.symmetry_level = 0
@@ -152,7 +152,23 @@ def solve_and_report(use_overload_checker: bool, log_path: str):
     print("propagations:    ", solver.num_integer_propagations)
     print("binary_props:    ", solver.num_binary_propagations)
     print("wall_time:       ", solver.wall_time)
-
+    if os.environ.get("TT_TRACE") == "1":
+        mode = os.environ.get("TT_MODES", "0")
+        # même règle que le C++ : seul "1" active ton algo
+        trace_path = "tt_modes1_log.txt" if mode[:1] == "1" else "tt_modes0_log.txt"
+        with open(trace_path, "a", encoding="utf-8") as f:
+            f.write(f"\n=== RESULTAT (TT_MODES={mode}) ===\n")
+            f.write(f"status:        {solver.status_name(status)}\n")
+            if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                f.write(f"objective:     {solver.objective_value}\n")
+                for i, v in enumerate(model.proto.variables):
+                    var = model.get_int_var_from_proto_index(i)
+                    f.write(f"  x{i} ({v.name or 'constante'}) = {solver.value(var)}\n")
+            f.write(f"branches:      {solver.num_branches}\n")
+            f.write(f"conflicts:     {solver.num_conflicts}\n")
+            f.write(f"propagations:  {solver.num_integer_propagations}\n")
+            f.write(f"binary_props:  {solver.num_binary_propagations}\n")
+            f.write(f"wall_time:     {solver.wall_time}\n")
 
 def main():
     solve_and_report(use_overload_checker=False, log_path="run_without.log")
