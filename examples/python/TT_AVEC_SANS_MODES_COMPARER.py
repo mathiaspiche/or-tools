@@ -1,0 +1,178 @@
+import os
+
+from absl import flags
+from ortools.sat.python import cp_model
+
+
+print("TT_MODES =", os.environ.get("TT_MODES"))
+flags.FLAGS(["energetic_cumulative_compare.py"])
+
+HORIZON = 60
+CAPACITIES = [3]
+RENEWABLE = [True]
+
+TASKS_MODES = [
+    [(12, [1])],                 # base task: height 1 over [0,12)
+    [(1, [1])],                  # peak at [2,3)
+    [(1, [1])],                  # peak at [5,6)
+    [(1, [1])],                  # peak at [8,9)
+    [(1, [3]), (3, [2])],        # X: mode A = (1, h=3), mode B = (3, h=2)
+]
+TASK_WINDOWS = [
+    (0, 0, 12, 12),
+    (2, 2, 3, 3),
+    (5, 5, 6, 6),
+    (8, 8, 9, 9),
+    (0, 9, 1, 12),
+]
+PRECEDENCES = []
+
+
+def build_model():
+    model = cp_model.CpModel()
+    num_res = len(CAPACITIES)
+    starts, ends, intervals = [], [], []
+    demands = [[] for _ in range(num_res)]
+    mode_lits = {}
+    for i, modes in enumerate(TASKS_MODES):
+        est, lst, ect, lct = TASK_WINDOWS[i]
+        durations = [d for d, _ in modes]
+        dmin = min(durations)
+
+        if ect < est + dmin or lst > lct - dmin:
+            print(f"  (note: task {i} window is looser than min duration "
+                  f"{dmin} allows; CP-SAT will tighten it)")
+
+        start = model.new_int_var(est, lst, f"start_{i}")
+        end = model.new_int_var(ect, lct, f"end_{i}")
+
+        if len(modes) > 1:
+            literals = [model.new_bool_var(f"t{i}_mode_{m}") for m in range(len(modes))]
+            model.add_exactly_one(literals)
+            mode_lits[i] = literals
+
+            duration = model.new_int_var_from_domain(
+                cp_model.Domain.from_values(durations), f"t{i}_duration")
+            groups = {}
+            for m, (d, _) in enumerate(modes):
+                model.add(duration == d).only_enforce_if(literals[m])
+                groups.setdefault(d, []).append(literals[m])
+            for d, grp in groups.items():
+                # fires only when every mode with this duration is false
+                model.add(duration != d).only_enforce_if([l.negated() for l in grp])
+
+            for k in range(num_res):
+                if not RENEWABLE[k]:
+                    continue
+                values_k = [req[k] for _, req in modes]
+                demand_k = model.new_int_var_from_domain(
+                    cp_model.Domain.from_values(values_k), f"t{i}_demand_r{k}")
+                for m, (_, req) in enumerate(modes):
+                    model.add(demand_k == req[k]).only_enforce_if(literals[m])
+                demands[k].append(demand_k)
+        else:
+            literals = None
+            duration = durations[0]
+            for k in range(num_res):
+                if RENEWABLE[k]:
+                    demands[k].append(model.new_constant(modes[0][1][k]))
+
+        mode_lits.setdefault(i, literals)
+        intervals.append(model.new_interval_var(start, duration, end, f"t{i}_interval"))
+        starts.append(start)
+        ends.append(end)
+
+    for a, b in PRECEDENCES:
+        model.add(ends[a] <= starts[b])
+
+    for k in range(num_res):
+        if RENEWABLE[k]:
+            model.add_cumulative(intervals, demands[k], CAPACITIES[k])
+        else:
+            total = 0
+            for i, modes in enumerate(TASKS_MODES):
+                if mode_lits[i] is None:
+                    total += modes[0][1][k]
+                else:
+                    total += sum(l * req[k] for l, (_, req) in zip(mode_lits[i], modes))
+            model.add(total <= CAPACITIES[k])
+
+    makespan = model.new_int_var(0, HORIZON, "makespan")
+    model.add_max_equality(makespan, ends)
+    model.minimize(makespan)
+    return model
+
+
+def solve_and_report(use_overload_checker: bool, log_path: str):
+    model = build_model()
+    solver = cp_model.CpSolver()
+
+    solver.parameters.num_workers = 1
+    solver.parameters.random_seed = 1
+    solver.parameters.use_overload_checker_in_cumulative = use_overload_checker
+
+    for flag_name, value in [
+        ("use_timetable_edge_finding_in_cumulative", False),
+        ("use_conservative_scale_overload_checker", False),
+        ("use_disjunctive_constraint_in_cumulative", False),
+        ("use_hard_precedences_in_cumulative", False),
+    ]:
+        if hasattr(solver.parameters, flag_name):
+            setattr(solver.parameters, flag_name, value)
+        else:
+            print(f"  (note: flag '{flag_name}' not found, skipped)")
+
+    solver.parameters.log_search_progress = True
+    solver.parameters.log_to_stdout = False      # log seulement dans le fichier
+    solver.parameters.log_subsolver_statistics = False
+    solver.parameters.cp_model_presolve = False
+    solver.parameters.cp_model_probing_level = 0
+    solver.parameters.linearization_level = 0
+    solver.parameters.symmetry_level = 0
+    log_lines = []
+    solver.log_callback = log_lines.append
+
+    status = solver.solve(model)
+
+    log_path = os.path.abspath(log_path)
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(log_lines))
+
+    label = "Avec energetic overload-checker" if use_overload_checker else "Sans (default)"
+    print(f"\n{'=' * 60}\n  {label}\n{'=' * 60}")
+    print(f"log : {len(log_lines)} lignes ecrites dans {log_path}")
+    print("status:          ", solver.status_name(status))
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        print("objective:       ", solver.objective_value)
+        for i, v in enumerate(model.proto.variables):
+            var = model.get_int_var_from_proto_index(i)
+            print(f"  x{i} ({v.name or 'constante'}) = {solver.value(var)}")
+    print("branches:        ", solver.num_branches)
+    print("conflicts:       ", solver.num_conflicts)
+    print("propagations:    ", solver.num_integer_propagations)
+    print("binary_props:    ", solver.num_binary_propagations)
+    print("wall_time:       ", solver.wall_time)
+    if os.environ.get("TT_TRACE") == "1":
+        mode = os.environ.get("TT_MODES", "0")
+        # même règle que le C++ : seul "1" active ton algo
+        trace_path = "tt_modes1_log.txt" if mode[:1] == "1" else "tt_modes0_log.txt"
+        with open(trace_path, "a", encoding="utf-8") as f:
+            f.write(f"\n=== RESULTAT (TT_MODES={mode}) ===\n")
+            f.write(f"status:        {solver.status_name(status)}\n")
+            if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                f.write(f"objective:     {solver.objective_value}\n")
+                for i, v in enumerate(model.proto.variables):
+                    var = model.get_int_var_from_proto_index(i)
+                    f.write(f"  x{i} ({v.name or 'constante'}) = {solver.value(var)}\n")
+            f.write(f"branches:      {solver.num_branches}\n")
+            f.write(f"conflicts:     {solver.num_conflicts}\n")
+            f.write(f"propagations:  {solver.num_integer_propagations}\n")
+            f.write(f"binary_props:  {solver.num_binary_propagations}\n")
+            f.write(f"wall_time:     {solver.wall_time}\n")
+
+def main():
+    solve_and_report(use_overload_checker=False, log_path="run_without.log")
+
+
+if __name__ == "__main__":
+    main()
