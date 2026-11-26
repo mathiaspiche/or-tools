@@ -50,7 +50,7 @@
 
 namespace operations_research {
 namespace sat {
-
+    std::string MpsDecrireDecision(Model* model, Literal decision);
 // This is used to hold the next decision the solver will take. It is either
 // a pure Boolean literal decision or correspond to an IntegerLiteral one.
 //

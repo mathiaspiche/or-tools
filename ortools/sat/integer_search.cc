@@ -12,7 +12,8 @@
 // limitations under the License.
 
 #include "ortools/sat/integer_search.h"
-
+#include <iostream>
+#include "ortools/sat/cp_model_mapping.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -57,7 +58,6 @@
 
 namespace operations_research {
 namespace sat {
-
 IntegerLiteral AtMinValue(IntegerVariable var, IntegerTrail* integer_trail) {
   const IntegerValue lb = integer_trail->LowerBound(var);
   DCHECK_LE(lb, integer_trail->UpperBound(var));
@@ -1520,8 +1520,10 @@ bool IntegerSearchHelper::TakeDecision(Literal decision,
       /*conflict=*/sat_solver_->CurrentDecisionLevel() <= old_level);
 
   sat_solver_->AdvanceDeterministicTime(time_limit_);
+
   return sat_solver_->ReapplyAssumptionsIfNeeded();
 }
+
 
 SatSolver::Status IntegerSearchHelper::SolveIntegerProblem() {
   if (time_limit_->LimitReached()) return SatSolver::LIMIT_REACHED;
